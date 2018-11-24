@@ -38,6 +38,7 @@ from typing import Tuple, List
 Position = Tuple[int, int]
 Velocity = Tuple[int, int]
 Dimension = Tuple[int, int]
+State = np.ndarray
 
 
 class Racetrack:
@@ -49,7 +50,7 @@ class Racetrack:
         self.__wallChar = '%'
         self.__startChar = 'P'
         self.__objectiveChar = '.'
-        self.__start: List[Position] = []
+        self.__start: List[State] = []
         self.__objective: List[Position] = []
 
         with open(filename) as f:
@@ -68,7 +69,7 @@ class Racetrack:
         for x in range(self.rows):
             for y in range(self.cols):
                 if self.track[x][y] == self.__startChar:
-                    self.__start.append((x, y))
+                    self.__start.append(np.array([x, y, 0, 0]))
                 elif self.track[x][y] == self.__objectiveChar:
                     self.__objective.append((x, y))
 
@@ -81,7 +82,7 @@ class Racetrack:
     def get_objectives(self) -> List[Position]:
         return copy.deepcopy(self.__objective)
 
-    def get_start(self) -> List[Position]:
+    def get_start(self) -> List[State]:
         return self.__start
 
     def get_dimensions(self) -> Dimension:

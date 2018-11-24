@@ -3,8 +3,10 @@ import pygame
 import sys
 import argparse
 import time
+import search
 
 import pygame.locals
+
 
 
 class Application:
@@ -24,9 +26,9 @@ class Application:
         self.blockSizeX = int(self.windowWidth / self.dim[1])
         self.blockSizeY = int(self.windowHeight / self.dim[0])
 
-    def execute(self, searchMethod, save):
+    def execute(self, search_method: str, save: str):
 
-        #path, statesExplored = search(self.maze, searchMethod)
+        path, statesExplored = search.search(self.track, search_method)
 
         pygame.init()
         self.displaySurface = pygame.display.set_mode((self.windowWidth, self.windowHeight), pygame.HWSURFACE)
