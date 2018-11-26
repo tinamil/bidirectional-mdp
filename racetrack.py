@@ -76,7 +76,7 @@ class Racetrack:
     def is_wall(self, x: int, y: int) -> bool:
         return self.track[x][y] == self.__wallChar
 
-    def is_objective(self, x: int, y: int) -> bool:
+    def __is_objective(self, x: int, y: int) -> bool:
         return (x, y) in self.__objective
 
     def get_objectives(self) -> List[Position]:
@@ -88,6 +88,16 @@ class Racetrack:
     def get_dimensions(self) -> Dimension:
         return self.rows, self.cols
 
+    @staticmethod
+    def get_actions(state: State) -> List[Tuple[State, State]]:
+        neighbors = []
+        for x in range(-1, 2):
+            for y in range(-1, 2):
+                new_neighbor = state + np.array([state[2] + x, state[3] + y, x, y])
+                other_new_neighbor = state + np.array([state[2], state[3], 0, 0])
+                neighbors.append((new_neighbor, other_new_neighbor))
+        return neighbors
+
     def __is_collision(self, x0: int, y0: int, x1: int, y1: int) -> bool:
         nodes = self.raytrace(x0, y0, x1, y1)
         for x, y in nodes:
@@ -98,9 +108,15 @@ class Racetrack:
     def __is_goal(self, x0: int, y0: int, x1: int, y1: int) -> bool:
         nodes = self.raytrace(x0, y0, x1, y1)
         for x, y in nodes:
-            if self.is_objective(x, y):
+            if self.__is_objective(x, y):
                 return True
         return False
+
+    def is_goal(self, state1: State, state2: State):
+        return self.__is_goal(state1[0], state1[1], state2[0], state2[1])
+
+    def is_collision(self, state1: State, state2: State):
+        return self.__is_collision(state1[0], state1[1], state2[0], state2[1])
 
     @staticmethod
     def raytrace(x0: int, y0: int, x1: int, y1: int) -> List[Position]:

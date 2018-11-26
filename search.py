@@ -1,6 +1,6 @@
 from __future__ import annotations
 from racetrack import Racetrack, State
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Dict
 import numpy as np
 
 """LAO*
@@ -29,28 +29,145 @@ def search(track: Racetrack, method: str):
     return LAO(track)
 
 
+p = .5
+
 
 class Node:
+    track = None
+    nodes: Dict[State, Node] = dict()
+
     def __init__(self, parent: Optional[Node], state: State):
         self.parent = parent
         self.state = state
-        self.children = []
+        self.children: List[Tuple[Node, Node]] = []
+        self.heuristic = self.__heuristic_estimate()
+        self.cost = self.heuristic
+        self.best_child = -1
 
-    def get_actions(self) -> List[Node]:
-        neighbors = []
-        for x in range(-1, 2):
-            for y in range(-1, 2):
-                new_neighbor = Node(self, self.state + [self.state[2] + x, self.state[3] + y, x, y])
-                neighbors.append(new_neighbor)
-        return neighbors
+    #TODO: Use this to build recursive connections for LAO? Maybe
+    @classmethod
+    def get_node(cls, parent: Optional[Node], state: State):
+        node = None
+        if state in cls.nodes:
+            node = cls.nodes[state]
+        else:
+            node = Node(parent, state)
 
-    def add_child(self, child: Node):
-        self.children.append(child)
+    @classmethod
+    def set_track(cls, racetrack: Racetrack) -> None:
+        cls.track = racetrack
+
+    def get_actions(self) -> List[Tuple[State, State]]:
+        return Racetrack.get_actions(self.state)
+
+    def add_child_action(self, success: Node, failure: Node) -> None:
+        self.children.append((success, failure))
+
+    def is_terminal(self) -> bool:
+        if self.parent is None:
+            return (self.state[0], self.state[1]) in self.track.get_objectives()
+        return self.track.is_goal(self.parent.state, self.state)
+
+    def __heuristic_estimate(self) -> float:
+        if self.is_terminal():
+            return 0
+
+        goals = self.track.get_objectives()
+        best = np.infty
+        for x in goals:
+            delta_vector = np.array(x) - self.state[:2]
+
+            delta_x = delta_vector[0]
+            delta_y = delta_vector[1]
+            velocity_x = self.state[1]
+            velocity_y = self.state[2]
+
+            # TODO: Consider replacing with a closed form solution (continuous if discrete doesn't exist)
+
+            if delta_x < 0:
+                delta_x = -delta_x
+                velocity_x = -velocity_x
+
+            if delta_y < 0:
+                delta_y = -delta_y
+                velocity_y = -velocity_y
+
+            time_x = 0
+            while delta_x > 0:
+                velocity_x += 1
+                delta_x -= velocity_x
+                time_x += 1
+
+            time_y = 0
+            while delta_y > 0:
+                velocity_y += 1
+                delta_y -= velocity_y
+                time_y += 1
+
+            new_time = max(time_x, time_y)
+            if new_time < best:
+                best = new_time
+
+        return best
+
+    def get_recommended_actions(self) -> Optional[Tuple[Node, Node]]:
+        if self.best_child == -1:
+            return None
+        else:
+            return self.children[self.best_child]
+
+    @staticmethod
+    def get_next_nonterminal_state(root: Node) -> Optional[Node]:
+        if root.cost == 0:
+            # Root is a terminal state (crossed the goal)
+            return None
+        best_children = root.get_recommended_actions()
+        if best_children is None:
+            # Root is not terminal but has not yet been expanded
+            return root
+
+        success_state, failure_state = best_children
+        success_search = Node.get_next_nonterminal_state(success_state)
+        if success_search is not None:
+            # The success_state has a non-terminal child node
+            return success_search
+
+        failure_search = Node.get_next_nonterminal_state(failure_state)
+        if failure_search is not None:
+            # Failure state has a non-terminal child node
+            return failure_search
+
+        # All recommended actions are terminal
+        return None
 
 
 def LAO(track: Racetrack):
-    start_g = Node(None, track.get_start()[0])
-    neighbors = start_g.get_actions()
-    done = False
 
+    Node.set_track(track)
+
+    start_g = Node(None, track.get_start()[0])
+
+    next_state = start_g
+    while next_state is not None:
+
+        # Expand the next state with its possible actions
+        actions = next_state.get_actions()
+        for next_success, next_failure in actions:
+            next_state.add_child_action(Node(next_state, next_success), Node(next_state, next_failure))
+
+        # Update state costs
+
+        # 1. Add next_state and all ancestors to ancestors set
+        ancestors = set()
+        node = next_state
+        while node is not None:
+            ancestors.add(node)
+            node = node.parent
+
+        # 2. Repeat until z is empty:
+        #    A. Remove from Z a state i such that no descendent of i in G' occurs in Z (Not guaranteed if looping is allowed)
+        #    B. Set i.cost = min cost expected value of action (1 + p * success.heuristic + (1-p) failure.heuristic)
+
+        next_state = Node.get_next_nonterminal_state(start_g)
     return [], 0
+
