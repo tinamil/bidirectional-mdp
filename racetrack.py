@@ -68,9 +68,9 @@ class Racetrack:
 
         for x in range(self.rows):
             for y in range(self.cols):
-                if self.track[x][y] == self.__startChar:
+                if self.track[x, y] == self.__startChar:
                     self.__start.append(np.array([x, y, 0, 0]))
-                elif self.track[x][y] == self.__objectiveChar:
+                elif self.track[x, y] == self.__objectiveChar:
                     self.__objective.append((x, y))
 
     def is_wall(self, x: int, y: int) -> bool:
@@ -88,13 +88,17 @@ class Racetrack:
     def get_dimensions(self) -> Dimension:
         return self.rows, self.cols
 
-    @staticmethod
-    def get_actions(state: State) -> List[Tuple[State, State]]:
+    def get_actions(self, state: State) -> List[Tuple[State, State]]:
+        #TODO: Start assumes index 0
         neighbors = []
         for x in range(-1, 2):
             for y in range(-1, 2):
                 new_neighbor = state + np.array([state[2] + x, state[3] + y, x, y])
                 other_new_neighbor = state + np.array([state[2], state[3], 0, 0])
+                if self.is_collision(state, new_neighbor):
+                    new_neighbor = self.get_start()[0]
+                if self.is_collision(state, other_new_neighbor):
+                    other_new_neighbor = self.get_start()[0]
                 neighbors.append((new_neighbor, other_new_neighbor))
         return neighbors
 
@@ -141,7 +145,7 @@ class Racetrack:
         dx *= 2
         dy *= 2
         tiles_visited = []
-        for i in range(n, 0):
+        for i in range(n, 0, -1):
             tiles_visited.append((x, y))
 
             if error > 0:

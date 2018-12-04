@@ -47,6 +47,10 @@ class Node:
         self.f = self.heuristic
         self.best_child = -1
 
+        if parent is not None and self.track.is_goal(self.parent.state, self.state):
+            self.cost = 0
+            self.f = 0
+
     @staticmethod
     def build(parent: Optional[Node], state: State) -> Node:
         if state.tobytes() in Node.nodes:
@@ -62,7 +66,7 @@ class Node:
         cls.track = racetrack
 
     def get_actions(self) -> List[Tuple[State, State]]:
-        return Racetrack.get_actions(self.state)
+        return self.track.get_actions(self.state)
 
     def add_child_action(self, success: Node, failure: Node) -> None:
         self.children.append((success, failure))
@@ -170,6 +174,7 @@ class Node:
             if state_values is None:
                 cost = self.cost + (p * success.f + (1 - p) * failure.f)
             else:
+                print(success.state)
                 cost = self.cost + (p * state_values[success] + (1 - p) * state_values[failure])
             if cost < best_child_action_cost:
                 best_child_action_cost = cost
