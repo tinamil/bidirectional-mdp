@@ -28,7 +28,7 @@ class Application:
 
     def execute(self, search_method: str, save: str):
 
-        path, statesExplored = search.search(self.track, search_method)
+        path = search.search(self.track, search_method)
 
         pygame.init()
         self.displaySurface = pygame.display.set_mode((self.windowWidth, self.windowHeight), pygame.HWSURFACE)
@@ -39,11 +39,11 @@ class Application:
         print("Results")
         #print("Path Length:", len(path))
         #print("States Explored:", statesExplored)
-        #self.drawPolicy(path)
 
         self.drawTrack()
         self.drawStart()
         self.drawObjective()
+        self.drawPolicy(path)
 
         pygame.display.flip()
         if save is not None:
@@ -67,9 +67,14 @@ class Application:
         return red, green, 0
 
     def drawPolicy(self, path):
-        for p in range(len(path)):
-            color = self.getColor(len(path), p)
-            self.drawSquare(path[p][0], path[p][1], color)
+        p = path
+        self.drawArrow(p.state[0], p.state[1], p.state[2], p.state[3])
+
+        success, fail = p.get_recommended_actions()
+        if not p.is_recursive_child(success):
+            self.drawPolicy(success)
+        if not p.is_recursive_child(fail):
+            self.drawPolicy(fail)
 
     # Simple wrapper for drawing a wall as a rectangle
     def drawWall(self, row, col):
@@ -91,8 +96,12 @@ class Application:
 
     # Draws start location of path
     def drawStart(self):
-        for x, y in self.track.get_start():
-            pygame.draw.rect(self.displaySurface, (0, 0, 255), (y * self.blockSizeX + self.blockSizeX / 4, x * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
+        for state in self.track.get_start():
+            pygame.draw.rect(self.displaySurface, (0, 0, 255), (state[1] * self.blockSizeX + self.blockSizeX / 4, state[0] * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
+
+    # Draws arrow
+    def drawArrow(self, row, col, row_accel, col_accel):
+        pygame.draw.rect(self.displaySurface, (0, 255, 0), (col * self.blockSizeX + self.blockSizeX / 4, row * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
 
     # Draws the full maze to the display context
     def drawTrack(self):

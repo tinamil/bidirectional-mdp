@@ -161,21 +161,33 @@ class Node:
         self.best_child = best_action
         self.f = new_f
 
-    def calculate_new_f(self, state_values: dict=None) -> Tuple[float, int]:
-        best_action = self.best_child
-        if best_action > -1:
-            if state_values is None:
-                best_child_action_cost = self.f
-            else:
-                best_child_action_cost = state_values[self]
-        else:
-            best_child_action_cost = np.infty
+    def calculate_new_f(self) -> Tuple[float, int]:
+        # best_action = self.best_child
+        # if best_action > -1:
+        #     best_child_action_cost = self.f
+        # else:
+        best_child_action_cost = np.infty
+        best_action = -1
         for idx, (success, failure) in enumerate(self.children):
-            if state_values is None:
-                cost = self.cost + (p * success.f + (1 - p) * failure.f)
-            else:
-                print(success.state)
-                cost = self.cost + (p * state_values[success] + (1 - p) * state_values[failure])
+            cost = self.cost + (p * success.f + (1 - p) * failure.f)
+            if cost < best_child_action_cost:
+                best_child_action_cost = cost
+                best_action = idx
+        return best_child_action_cost, best_action
+
+    def calculate_new_f_from_old_state(self, state_values) -> Tuple[float, int]:
+        # best_action = self.best_child
+        # if best_action > -1:
+        #     best_child_action_cost = state_values[self]
+        # else:
+        best_child_action_cost = np.infty
+        best_action = -1
+        for idx, (success, failure) in enumerate(self.children):
+            if success not in state_values:
+                state_values[success] = success.f
+            if failure not in state_values:
+                state_values[failure] = failure.f
+            cost = self.cost + (p * state_values[success] + (1 - p) * state_values[failure])
             if cost < best_child_action_cost:
                 best_child_action_cost = cost
                 best_action = idx
@@ -211,6 +223,7 @@ def LAO(track: Racetrack):
             next_state.update_f()
             next_state = Node.get_next_nonterminal_state(start_g)
 
+        #print("Finished a possible search")
         '''
         3. Convergence test: Perform value iteration on the states in the best solution graph. Continue until one of the
               following two conditions is met:
@@ -224,22 +237,11 @@ def LAO(track: Racetrack):
     '''
     4. Return an ε-optimal solution graph
     '''
-
-    return [], 0
-
-
-def initialize_mdp_states(node: Node, values: dict) -> None:
-    values[node] = node.f
-    if node.best_child != -1:
-        success, fail = node.get_recommended_actions()
-        if not node.is_recursive_child(success):
-            initialize_mdp_states(success, values)
-        if not node.is_recursive_child(fail):
-            initialize_mdp_states(fail, values)
+    return start_g
 
 
 def update_mdp_states(node: Node, values: dict, old_values, delta) -> float:
-    values[node], best_action = node.calculate_new_f(old_values)
+    values[node], best_action = node.calculate_new_f_from_old_state(old_values)
     node.best_child = best_action
     delta = max(delta, abs(values[node] - old_values[node]))
     if node.best_child != -1:
@@ -254,8 +256,6 @@ def update_mdp_states(node: Node, values: dict, old_values, delta) -> float:
 def value_iteration(mdp, epsilon=0.001):
     """Solving an MDP by value iteration."""
     U1 = dict()
-    initialize_mdp_states(mdp, U1)
-
     while Node.get_next_nonterminal_state(mdp) is None:
         U = U1.copy()
         delta = 0
