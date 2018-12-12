@@ -43,7 +43,7 @@ class Application:
         self.drawTrack()
         self.drawStart()
         self.drawObjective()
-        self.drawPolicy(path)
+        self.drawPolicy(path, set())
 
         pygame.display.flip()
         if save is not None:
@@ -66,15 +66,18 @@ class Application:
         red = 255 - green
         return red, green, 0
 
-    def drawPolicy(self, path):
+    def drawPolicy(self, path, seen_nodes: set):
+        seen_nodes.add(path)
         p = path
         self.drawArrow(p.state[0], p.state[1], p.state[2], p.state[3])
 
-        success, fail = p.get_recommended_actions()
-        if not p.is_recursive_child(success):
-            self.drawPolicy(success)
-        if not p.is_recursive_child(fail):
-            self.drawPolicy(fail)
+        actions = p.get_recommended_actions()
+        if actions is not None:
+            success, fail = actions
+            if success not in seen_nodes:
+                self.drawPolicy(success, seen_nodes)
+            if fail not in seen_nodes:
+                self.drawPolicy(fail, seen_nodes)
 
     # Simple wrapper for drawing a wall as a rectangle
     def drawWall(self, row, col):

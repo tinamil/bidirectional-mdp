@@ -76,8 +76,8 @@ class Node:
             return (self.state[0], self.state[1]) in self.track.get_objectives()
         return self.track.is_goal(self.parent.state, self.state)
 
-    def is_recursive_child(self, child: Node) -> bool:
-        return child.parent != self
+    # def is_recursive_child(self, child: Node) -> bool:
+    #     return child.parent != self
 
     def __heuristic_estimate(self) -> float:
         if self.is_terminal():
@@ -126,7 +126,9 @@ class Node:
             return self.children[self.best_child]
 
     @staticmethod
-    def get_next_nonterminal_state(root: Node) -> Optional[Node]:
+    def get_next_nonterminal_state(root: Node, seen_nodes: set) -> Optional[Node]:
+        seen_nodes.add(root)
+
         if root.cost == 0:
             # Root is a terminal state (crossed the goal)
             return None
@@ -138,15 +140,15 @@ class Node:
             return root
 
         success_state, failure_state = best_children
-        if not root.is_recursive_child(success_state):
-            success_search = Node.get_next_nonterminal_state(success_state)
+        if success_state not in seen_nodes:
+            success_search = Node.get_next_nonterminal_state(success_state, seen_nodes)
             if success_search is not None:
                 # The success_state has a non-terminal child node
                 root.update_f()
                 return success_search
 
-        if not root.is_recursive_child(failure_state):
-            failure_search = Node.get_next_nonterminal_state(failure_state)
+        if failure_state not in seen_nodes:
+            failure_search = Node.get_next_nonterminal_state(failure_state, seen_nodes)
             if failure_search is not None:
                 # Failure state has a non-terminal child node
                 root.update_f()
@@ -175,7 +177,7 @@ class Node:
                 best_action = idx
         return best_child_action_cost, best_action
 
-    def calculate_new_f_from_old_state(self, state_values) -> Tuple[float, int]:
+    def calculate_new_f_from_old_state(self, state_values, delta, new_values) -> Tuple[float, int, float]:
         # best_action = self.best_child
         # if best_action > -1:
         #     best_child_action_cost = state_values[self]
@@ -183,15 +185,21 @@ class Node:
         best_child_action_cost = np.infty
         best_action = -1
         for idx, (success, failure) in enumerate(self.children):
+            if success.f is np.infty or failure.f is np.infty:
+                print(success, failure)
             if success not in state_values:
                 state_values[success] = success.f
+                new_values[success] = success.f
+                delta = max(delta, success.f)
             if failure not in state_values:
                 state_values[failure] = failure.f
+                new_values[failure] = failure.f
+                delta = max(delta, failure.f)
             cost = self.cost + (p * state_values[success] + (1 - p) * state_values[failure])
             if cost < best_child_action_cost:
                 best_child_action_cost = cost
                 best_action = idx
-        return best_child_action_cost, best_action
+        return best_child_action_cost, best_action, delta
 
 
 def LAO(track: Racetrack):
@@ -221,7 +229,7 @@ def LAO(track: Racetrack):
             for next_success, next_failure in actions:
                 next_state.add_child_action(Node.build(next_state, next_success), Node.build(next_state, next_failure))
             next_state.update_f()
-            next_state = Node.get_next_nonterminal_state(start_g)
+            next_state = Node.get_next_nonterminal_state(start_g, set())
 
         #print("Finished a possible search")
         '''
@@ -233,6 +241,8 @@ def LAO(track: Racetrack):
         result = value_iteration(start_g)
         if result is not None:
             finished = True
+        else:
+            next_state = Node.get_next_nonterminal_state(start_g, set())
 
     '''
     4. Return an ε-optimal solution graph
@@ -240,26 +250,32 @@ def LAO(track: Racetrack):
     return start_g
 
 
-def update_mdp_states(node: Node, values: dict, old_values, delta) -> float:
-    values[node], best_action = node.calculate_new_f_from_old_state(old_values)
-    node.best_child = best_action
+def update_mdp_states(node: Node, values: dict, old_values: dict, delta: float, seen_nodes: set) -> float:
+    seen_nodes.add(node)
+    new_f, best_action, delta = node.calculate_new_f_from_old_state(old_values, delta, values)
+    if best_action != -1:
+        values[node] = new_f
+        node.best_child = best_action
+    else:
+        values[node] = node.f
     delta = max(delta, abs(values[node] - old_values[node]))
     if node.best_child != -1:
         success, fail = node.get_recommended_actions()
-        if not node.is_recursive_child(success):
-            delta = update_mdp_states(success, values, old_values, delta)
-        if not node.is_recursive_child(fail):
-            delta = update_mdp_states(fail, values, old_values, delta)
+        if success not in seen_nodes:
+            delta = update_mdp_states(success, values, old_values, delta, seen_nodes)
+        if fail not in seen_nodes:
+            delta = update_mdp_states(fail, values, old_values, delta, seen_nodes)
     return delta
 
 
 def value_iteration(mdp, epsilon=0.001):
     """Solving an MDP by value iteration."""
     U1 = dict()
-    while Node.get_next_nonterminal_state(mdp) is None:
+    while Node.get_next_nonterminal_state(mdp, set()) is None:
         U = U1.copy()
+        seen_nodes = set()
         delta = 0
-        delta = update_mdp_states(mdp, U1, U, delta)
+        delta = update_mdp_states(mdp, U1, U, delta, seen_nodes)
         if delta < epsilon:
             return U
     return None
