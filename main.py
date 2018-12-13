@@ -3,7 +3,7 @@ import pygame
 import sys
 import argparse
 import time
-import search
+import LAO_search
 
 import pygame.locals
 
@@ -28,7 +28,7 @@ class Application:
 
     def execute(self, search_method: str, save: str):
 
-        path = search.search(self.track, search_method)
+        path = LAO_search.search(self.track, search_method)
 
         pygame.init()
         self.displaySurface = pygame.display.set_mode((self.windowWidth, self.windowHeight), pygame.HWSURFACE)

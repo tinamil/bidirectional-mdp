@@ -25,8 +25,6 @@ tip state, go to step 2.
 4. Return an optimal (or ε-optimal) solution graph.
 """
 
-#TODO: Check for wall collisions!
-
 def search(track: Racetrack, method: str):
     return LAO(track)
 
