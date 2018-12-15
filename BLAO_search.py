@@ -35,54 +35,84 @@ p = .5
 
 class Node:
     track = None
-    nodes: Dict[bytes, Node] = dict()
+    forward_nodes: Dict[bytes, Node] = dict()
+    backward_nodes: Dict[bytes, Node] = dict()
 
-    def __init__(self, parent: Optional[Node], state: State):
+    def __init__(self, parent: Optional[Node], state: State, forward: bool):
         self.parent = parent
         self.state = state
         self.children: List[Tuple[Node, Node]] = []
-        self.heuristic = self.__heuristic_estimate()
+        self.reverse_children: List[Tuple[Node, Node]] = []
+        self.heuristic = self.__heuristic_estimate(forward)
         self.cost = 1
         self.f = self.heuristic
         self.best_child = -1
+        self.forward = forward
 
-        if parent is not None and self.track.is_goal(self.parent.state, self.state):
-            self.cost = 0
-            self.f = 0
+        if forward:
+            if parent is not None and self.track.is_goal(self.parent.state, self.state):
+                self.cost = 0
+                self.f = 0
+        else:
+            if parent is not None and self.track.is_start(self.parent.state, self.state):
+                self.cost = 0
+                self.f = 0
 
     @staticmethod
-    def build(parent: Optional[Node], state: State) -> Node:
-        if state.tobytes() in Node.nodes:
-            recursive_node = Node.nodes[state.tobytes()]
-            return recursive_node
+    def build(parent: Optional[Node], state: State, forward: bool) -> Node:
+        if forward:
+            if state.tobytes() in Node.forward_nodes:
+                recursive_node = Node.forward_nodes[state.tobytes()]
+                return recursive_node
+            else:
+                new_node = Node(parent, state, forward)
+                Node.forward_nodes[state.tobytes()] = new_node
+                return new_node
         else:
-            new_node = Node(parent, state)
-            Node.nodes[state.tobytes()] = new_node
-            return new_node
+            if state.tobytes() in Node.backward_nodes:
+                recursive_node = Node.backward_nodes[state.tobytes()]
+                return recursive_node
+            else:
+                new_node = Node(parent, state, forward)
+                Node.backward_nodes[state.tobytes()] = new_node
+                return new_node
 
     @classmethod
     def set_track(cls, racetrack: Racetrack) -> None:
         cls.track = racetrack
 
-    def get_actions(self) -> List[Tuple[State, State]]:
-        return self.track.get_actions(self.state)
+    def get_actions(self, forward):
+        return self.track.get_actions(self.state, forward)
 
     def add_child_action(self, success: Node, failure: Node) -> None:
         self.children.append((success, failure))
 
-    def is_terminal(self) -> bool:
+    def add_reverse_children(self, predecessor) -> None:
+        self.reverse_children.append(predecessor)
+
+    def is_terminal(self, forward: bool) -> bool:
         if self.parent is None:
-            return (self.state[0], self.state[1]) in self.track.get_objectives()
+            if forward:
+                return (self.state[0], self.state[1]) in self.track.get_objectives()
+            else:
+                for x in self.track.get_start():
+                    if np.array_equal(x, self.state):
+                        return True
+                return False
         return self.track.is_goal(self.parent.state, self.state)
 
-    def __heuristic_estimate(self) -> float:
-        if self.is_terminal():
+    def __heuristic_estimate(self, forward: bool) -> float:
+        if self.is_terminal(forward):
             return 0
 
-        goals = self.track.get_objectives()
+        if forward:
+            goals = self.track.get_objectives()
+        else:
+            goals = self.track.get_start()
+
         best = np.infty
         for x in goals:
-            delta_vector = np.array(x) - self.state[:2]
+            delta_vector = np.array(x[:2]) - self.state[:2]
 
             delta_x = delta_vector[0]
             delta_y = delta_vector[1]
@@ -122,8 +152,11 @@ class Node:
             return self.children[self.best_child]
 
     @staticmethod
-    def get_next_nonterminal_state(root: Node, seen_nodes: set) -> Optional[Node]:
+    def get_next_nonterminal_state(root: Node, seen_nodes: set, other_direction_nodes: set) -> Optional[Node]:
         seen_nodes.add(root)
+
+        if root in other_direction_nodes:
+            return None
 
         if root.cost == 0:
             # Root is a terminal state (crossed the goal)
@@ -137,14 +170,14 @@ class Node:
 
         success_state, failure_state = best_children
         if success_state not in seen_nodes:
-            success_search = Node.get_next_nonterminal_state(success_state, seen_nodes)
+            success_search = Node.get_next_nonterminal_state(success_state, seen_nodes, other_direction_nodes)
             if success_search is not None:
                 # The success_state has a non-terminal child node
                 root.update_f()
                 return success_search
 
         if failure_state not in seen_nodes:
-            failure_search = Node.get_next_nonterminal_state(failure_state, seen_nodes)
+            failure_search = Node.get_next_nonterminal_state(failure_state, seen_nodes, other_direction_nodes)
             if failure_search is not None:
                 # Failure state has a non-terminal child node
                 root.update_f()
@@ -182,7 +215,7 @@ class Node:
         best_action = -1
         for idx, (success, failure) in enumerate(self.children):
             if success.f is np.infty or failure.f is np.infty:
-                print(success, failure)
+                print("Infinity f value!", success.state, failure.state)
             if success not in state_values:
                 state_values[success] = success.f
                 new_values[success] = success.f
@@ -207,10 +240,14 @@ def BLAO(track: Racetrack):
     '''
     1. The explicit graph G' initially consists of the start state s and goal state g
     '''
-    start_g = Node.build(None, track.get_start()[0])
+    start_g = Node.build(None, track.get_start()[0], True)
+
     obj_x, obj_y = track.get_objectives()[0]
-    end_state = np.ndarray((obj_x, obj_y, 0, 0))
-    end_g = Node.build(None, end_state)
+    end_state = np.zeros(4, dtype=int)
+    end_state[0] = obj_x
+    end_state[1] = obj_y
+    end_g = Node.build(None, end_state, False)
+
     next_state = start_g
     finished = False
     go_forward = True
@@ -227,14 +264,33 @@ def BLAO(track: Racetrack):
                 best actions.  Mark the best actions.
         '''
         while next_state is not None:
-            actions = next_state.get_actions()
-            for next_success, next_failure in actions:
-                next_state.add_child_action(Node.build(next_state, next_success), Node.build(next_state, next_failure))
-            next_state.update_f()
+            actions = next_state.get_actions(go_forward)
             if go_forward:
-                next_state = Node.get_next_nonterminal_state(start_g, set())
+                for next_success, next_failure in actions:
+                    next_state.add_child_action(Node.build(next_state, next_success, go_forward), Node.build(next_state, next_failure, go_forward))
+                next_state.update_f()
             else:
-                next_state = Node.get_next_nonterminal_state(end_g, set())
+                for backward_expansion_state in actions:
+                    prev_state = Node.build(None, backward_expansion_state, go_forward)
+                    next_state.add_reverse_children(prev_state)
+                    if prev_state.best_child == -1:
+                        prev_actions = prev_state.get_actions(True)
+                        for next_success, next_failure in prev_actions:
+                            prev_state.add_child_action(Node.build(None, next_success, True), Node.build(None, next_failure, True))
+                    prev_state.update_f()
+                next_state.update_f()
+
+            go_forward = start_g.f < end_g.f
+
+            if go_forward:
+                forward_nodes = set()
+                next_state = Node.get_next_nonterminal_state(start_g, forward_nodes, set())
+                other_direction_nodes = forward_nodes
+            else:
+                backward_nodes = set()
+                next_state = Node.get_next_nonterminal_state(end_g, backward_nodes, set())
+                other_direction_nodes = backward_nodes
+
 
         '''
         4. Convergence test: Perform value iteration on the states in the best solution graph. Continue until one of the
@@ -242,19 +298,14 @@ def BLAO(track: Racetrack):
                     (i) If the error bound falls below ε, go to step 5.
                     (ii) If the best solution graph changes so that it has an unexpanded tip state, go to step 3.
         '''
-        result = value_iteration(start_g)
-        if result is not None:
+        next_state = value_iteration(start_g, end_g, go_forward)
+        if next_state is None:
             finished = True
-        else:
-            if go_forward:
-                next_state = Node.get_next_nonterminal_state(start_g, set())
-            else:
-                next_state = Node.get_next_nonterminal_state(end_g, set())
 
     '''
     5. Return an ε-optimal solution graph
     '''
-    return start_g
+    return start_g, end_g
 
 
 def update_mdp_states(node: Node, values: dict, old_values: dict, delta: float, seen_nodes: set) -> float:
@@ -265,6 +316,8 @@ def update_mdp_states(node: Node, values: dict, old_values: dict, delta: float, 
         node.best_child = best_action
     else:
         values[node] = node.f
+        if node not in old_values:
+            old_values[node] = node.f
     delta = max(delta, abs(values[node] - old_values[node]))
     if node.best_child != -1:
         success, fail = node.get_recommended_actions()
@@ -275,14 +328,52 @@ def update_mdp_states(node: Node, values: dict, old_values: dict, delta: float, 
     return delta
 
 
-def value_iteration(mdp, epsilon=0.001):
+def get_optimum_nodes(node: Node, seen_nodes: set):
+    seen_nodes.add(node)
+    if node.best_child != -1:
+        success, fail = node.get_recommended_actions()
+        if success not in seen_nodes:
+            get_optimum_nodes(success, seen_nodes)
+        if fail not in seen_nodes:
+            get_optimum_nodes(fail, seen_nodes)
+
+
+def value_iteration(forward_mdp, backward_mdp, go_forward, epsilon=0.01):
     """Solving an MDP by value iteration."""
-    U1 = dict()
-    while Node.get_next_nonterminal_state(mdp, set()) is None:
-        U = U1.copy()
+    U1_forward = dict()
+    U1_backward = dict()
+    nonterminal_node = None
+    while nonterminal_node is None:
+        U = U1_forward.copy()
         seen_nodes = set()
         delta = 0
-        delta = update_mdp_states(mdp, U1, U, delta, seen_nodes)
+        delta = update_mdp_states(forward_mdp, U1_forward, U, delta, seen_nodes)
+
+        U = U1_backward.copy()
+        seen_nodes = set()
+        delta = update_mdp_states(backward_mdp, U1_backward, U, delta, seen_nodes)
+
         if delta < epsilon:
-            return U
-    return None
+            return None
+
+        #best_forward_nodes = set()
+        #best_backward_nodes = set()
+        #get_optimum_nodes(forward_mdp, best_forward_nodes)
+        #get_optimum_nodes(backward_mdp, best_backward_nodes)
+
+        forward_nonterminal = Node.get_next_nonterminal_state(forward_mdp, set(), set())
+        backward_nonterminal = Node.get_next_nonterminal_state(backward_mdp, set(), set())
+
+        #backward_nonterminal = None
+        # if go_forward and forward_nonterminal is not None:
+        nonterminal_node = forward_nonterminal
+        # elif go_forward and backward_nonterminal is not None:
+        #     nonterminal_node = backward_nonterminal
+        #     go_forward = False
+        # elif not go_forward and backward_nonterminal is not None:
+        #     nonterminal_node = backward_nonterminal
+        # elif not go_forward and forward_nonterminal is not None:
+        #     nonterminal_node = forward_nonterminal
+        #     go_forward = True
+
+    return nonterminal_node

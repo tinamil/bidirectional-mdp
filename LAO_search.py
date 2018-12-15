@@ -84,7 +84,7 @@ class Node:
         goals = self.track.get_objectives()
         best = np.infty
         for x in goals:
-            delta_vector = np.array(x) - self.state[:2]
+            delta_vector = np.array(x[:2]) - self.state[:2]
 
             delta_x = delta_vector[0]
             delta_y = delta_vector[1]
@@ -236,11 +236,9 @@ def LAO(track: Racetrack):
                     (i) If the error bound falls below ε, go to step 4.
                     (ii) If the best solution graph changes so that it has an unexpanded tip state, go to step 2.
         '''
-        result = value_iteration(start_g)
-        if result is not None:
+        next_state = value_iteration(start_g)
+        if next_state is None:
             finished = True
-        else:
-            next_state = Node.get_next_nonterminal_state(start_g, set())
 
     '''
     4. Return an ε-optimal solution graph
@@ -269,11 +267,13 @@ def update_mdp_states(node: Node, values: dict, old_values: dict, delta: float, 
 def value_iteration(mdp, epsilon=0.001):
     """Solving an MDP by value iteration."""
     U1 = dict()
-    while Node.get_next_nonterminal_state(mdp, set()) is None:
+    nonterminal_node = None
+    while nonterminal_node is None:
         U = U1.copy()
         seen_nodes = set()
         delta = 0
         delta = update_mdp_states(mdp, U1, U, delta, seen_nodes)
         if delta < epsilon:
-            return U
-    return None
+            return None
+        nonterminal_node = Node.get_next_nonterminal_state(mdp, set())
+    return nonterminal_node

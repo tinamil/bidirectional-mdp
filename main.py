@@ -4,6 +4,7 @@ import sys
 import argparse
 import time
 import LAO_search
+import BLAO_search
 
 import pygame.locals
 
@@ -27,8 +28,12 @@ class Application:
         self.blockSizeY = int(self.windowHeight / self.dim[0])
 
     def execute(self, search_method: str, save: str):
-
-        path = LAO_search.search(self.track, search_method)
+        bidirectional = True
+        path_end = None
+        if bidirectional:
+            path, path_end = BLAO_search.search(self.track, search_method)
+        else:
+            path = LAO_search.search(self.track, search_method)
 
         pygame.init()
         self.displaySurface = pygame.display.set_mode((self.windowWidth, self.windowHeight), pygame.HWSURFACE)
@@ -40,10 +45,11 @@ class Application:
         #print("Path Length:", len(path))
         #print("States Explored:", statesExplored)
 
+        self.drawPolicy(path, set())
+        self.drawPolicy(path_end, set(), True)
         self.drawTrack()
         self.drawStart()
         self.drawObjective()
-        self.drawPolicy(path, set())
 
         pygame.display.flip()
         if save is not None:
@@ -66,18 +72,33 @@ class Application:
         red = 255 - green
         return red, green, 0
 
-    def drawPolicy(self, path, seen_nodes: set):
-        seen_nodes.add(path)
+    def drawPolicy(self, path, seen_nodes: set, invert=False, optimum=True):
+        if path is None:
+            return
+        seen_nodes.add(path.state[:2].tobytes())
         p = path
-        self.drawArrow(p.state[0], p.state[1], p.state[2], p.state[3])
+        if invert:
+            if optimum:
+                color = (128, 0, 255)
+            else:
+                color = (128, 0, 0)
+        else:
+            if optimum:
+                color = (0, 255, 255)
+            else:
+                color = (0, 255, 0)
+
+        self.drawArrow(p.state[0], p.state[1], p.state[2], p.state[3], color)
 
         actions = p.get_recommended_actions()
         if actions is not None:
             success, fail = actions
-            if success not in seen_nodes:
-                self.drawPolicy(success, seen_nodes)
-            if fail not in seen_nodes:
-                self.drawPolicy(fail, seen_nodes)
+            if success.state[:2].tobytes() not in seen_nodes:
+                seen_nodes = self.drawPolicy(success, seen_nodes, invert, optimum)
+            optimum = False
+            if fail.state[:2].tobytes() not in seen_nodes:
+                seen_nodes = self.drawPolicy(fail, seen_nodes, invert, optimum)
+        return seen_nodes
 
     # Simple wrapper for drawing a wall as a rectangle
     def drawWall(self, row, col):
@@ -103,8 +124,8 @@ class Application:
             pygame.draw.rect(self.displaySurface, (0, 0, 255), (state[1] * self.blockSizeX + self.blockSizeX / 4, state[0] * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
 
     # Draws arrow
-    def drawArrow(self, row, col, row_accel, col_accel):
-        pygame.draw.rect(self.displaySurface, (0, 255, 0), (col * self.blockSizeX + self.blockSizeX / 4, row * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
+    def drawArrow(self, row, col, row_accel, col_accel, color):
+        pygame.draw.rect(self.displaySurface, color, (col * self.blockSizeX + self.blockSizeX / 4, row * self.blockSizeY + self.blockSizeY / 4, self.blockSizeX * 0.5, self.blockSizeY * 0.5), 0)
 
     # Draws the full maze to the display context
     def drawTrack(self):

@@ -74,10 +74,20 @@ class Racetrack:
                     self.__objective.append((x, y))
 
     def is_wall(self, x: int, y: int) -> bool:
+        if x >= self.track.shape[0] or x < 0:
+            return True
+        if y < 0 or y >= self.track.shape[1]:
+            return True
         return self.track[x][y] == self.__wallChar
 
     def __is_objective(self, x: int, y: int) -> bool:
         return (x, y) in self.__objective
+
+    def __is_in_start(self, x: int, y: int) -> bool:
+        for s in self.__start:
+            if x == s[0] and y == s[1]:
+                return True
+        return False
 
     def get_objectives(self) -> List[Position]:
         return copy.deepcopy(self.__objective)
@@ -88,18 +98,24 @@ class Racetrack:
     def get_dimensions(self) -> Dimension:
         return self.rows, self.cols
 
-    def get_actions(self, state: State) -> List[Tuple[State, State]]:
-        #TODO: Start assumes index 0
+    def get_actions(self, state: State, forward: bool = True):
         neighbors = []
         for x in range(-1, 2):
             for y in range(-1, 2):
-                new_neighbor = state + np.array([state[2] + x, state[3] + y, x, y])
-                other_new_neighbor = state + np.array([state[2], state[3], 0, 0])
-                if self.is_collision(state, new_neighbor):
-                    new_neighbor = self.get_start()[0]
-                if self.is_collision(state, other_new_neighbor):
-                    other_new_neighbor = self.get_start()[0]
-                neighbors.append((new_neighbor, other_new_neighbor))
+                if forward:
+                    new_neighbor = state + np.array([state[2] + x, state[3] + y, x, y])
+                    other_new_neighbor = state + np.array([state[2], state[3], 0, 0])
+                    if self.is_collision(state, new_neighbor):
+                        new_neighbor = self.get_start()[0]
+                    if self.is_collision(state, other_new_neighbor):
+                        other_new_neighbor = self.get_start()[0]
+                    neighbors.append((new_neighbor, other_new_neighbor))
+
+                else:
+                    new_neighbor = state - np.array([state[2] - x, state[3] - y, x, y])
+                    if not self.is_collision(state, new_neighbor):
+                        neighbors.append(new_neighbor)
+
         return neighbors
 
     def __is_collision(self, x0: int, y0: int, x1: int, y1: int) -> bool:
@@ -116,8 +132,22 @@ class Racetrack:
                 return True
         return False
 
+    def __is_start(self, x0: int, y0: int, x1: int, y1: int) -> bool:
+        nodes = self.raytrace(x0, y0, x1, y1)
+        for x, y in nodes:
+            if self.__is_in_start(x, y):
+                return True
+        return False
+
     def is_goal(self, state1: State, state2: State):
+        if state2[2] != 0 or state2[3] != 0:
+            return False
         return self.__is_goal(state1[0], state1[1], state2[0], state2[1])
+
+    def is_start(self, state1: State, state2: State):
+        if state2[2] != 0 or state2[3] != 0:
+            return False
+        return self.__is_start(state1[0], state1[1], state2[0], state2[1])
 
     def is_collision(self, state1: State, state2: State):
         return self.__is_collision(state1[0], state1[1], state2[0], state2[1])
