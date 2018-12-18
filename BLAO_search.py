@@ -86,6 +86,8 @@ class Node:
 
     def add_child_action(self, success: Node, failure: Node) -> None:
         self.children.append((success, failure))
+        success.add_reverse_children(self)
+        failure.add_reverse_children(self)
 
     def add_reverse_children(self, predecessor) -> None:
         self.reverse_children.append(predecessor)
@@ -93,7 +95,7 @@ class Node:
     def is_terminal(self, forward: bool) -> bool:
         if self.parent is None:
             if forward:
-                return (self.state[0], self.state[1]) in self.track.get_objectives()
+                return self.state[2] == 0 and self.state[3] == 0 and (self.state[0], self.state[1]) in self.track.get_objectives()
             else:
                 for x in self.track.get_start():
                     if np.array_equal(x, self.state):
@@ -250,7 +252,8 @@ def BLAO(track: Racetrack):
 
     next_state = start_g
     finished = False
-    go_forward = True
+    #go_forward = True
+    go_forward = False
     while not finished:
         '''
             2. Forward and backward started concurrently (alternately in this case)
@@ -270,17 +273,16 @@ def BLAO(track: Racetrack):
                     next_state.add_child_action(Node.build(next_state, next_success, go_forward), Node.build(next_state, next_failure, go_forward))
                 next_state.update_f()
             else:
+                next_state.update_f()
                 for backward_expansion_state in actions:
                     prev_state = Node.build(None, backward_expansion_state, go_forward)
-                    next_state.add_reverse_children(prev_state)
                     if prev_state.best_child == -1:
                         prev_actions = prev_state.get_actions(True)
                         for next_success, next_failure in prev_actions:
                             prev_state.add_child_action(Node.build(None, next_success, True), Node.build(None, next_failure, True))
                     prev_state.update_f()
-                next_state.update_f()
 
-            go_forward = start_g.f < end_g.f
+            #go_forward = start_g.f < end_g.f
 
             if go_forward:
                 forward_nodes = set()

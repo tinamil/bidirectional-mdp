@@ -28,7 +28,7 @@ class Application:
         self.blockSizeY = int(self.windowHeight / self.dim[0])
 
     def execute(self, search_method: str, save: str):
-        bidirectional = True
+        bidirectional = False
         path_end = None
         if bidirectional:
             path, path_end = BLAO_search.search(self.track, search_method)
@@ -45,6 +45,7 @@ class Application:
         #print("Path Length:", len(path))
         #print("States Explored:", statesExplored)
 
+        self.drawExplored(path, set())
         self.drawPolicy(path, set())
         self.drawPolicy(path_end, set(), True)
         self.drawTrack()
@@ -98,6 +99,24 @@ class Application:
             optimum = False
             if fail.state[:2].tobytes() not in seen_nodes:
                 seen_nodes = self.drawPolicy(fail, seen_nodes, invert, optimum)
+        return seen_nodes
+
+    def drawExplored(self, path, seen_nodes: set):
+        if path is None:
+            return
+        seen_nodes.add(path.state[:2].tobytes())
+        p = path
+        color = (30, 30, 30)
+
+        self.drawArrow(p.state[0], p.state[1], p.state[2], p.state[3], color)
+
+        for actions in p.children:
+            if actions is not None:
+                success, fail = actions
+                if success.state[:2].tobytes() not in seen_nodes:
+                    seen_nodes = self.drawExplored(success, seen_nodes)
+                if fail.state[:2].tobytes() not in seen_nodes:
+                    seen_nodes = self.drawExplored(fail, seen_nodes)
         return seen_nodes
 
     # Simple wrapper for drawing a wall as a rectangle
